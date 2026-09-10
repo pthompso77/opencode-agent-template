@@ -1,0 +1,1 @@
+<!-- Workspace requirements template/output -->
