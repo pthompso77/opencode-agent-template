@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TaskPlan",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string" },
+    "current_phase": { "type": "string" },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { 
+            "type": "string", 
+            "enum": ["PENDING", "IN_PROGRESS", "NEEDS_TROUBLESHOOTING", "PR_READY", "COMPLETED", "ESCALATED"] 
+          },
+          "target_files": { "type": "array", "items": { "type": "string" } },
+          "verification_cmd": { "type": "string" },
+          "acceptance_criteria": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "title", "status", "target_files", "verification_cmd"]
+      }
+    }
+  },
+  "required": ["version", "tasks"]
+}
