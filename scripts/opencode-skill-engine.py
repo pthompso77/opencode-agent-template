@@ -2,26 +2,27 @@
 """
 OpenCode Skill Engine
 Local host runner for validating, testing, and promoting proposed Hermes skill patches
-from .tasks/pending_skills/ into active .opencode/skills/ or references/learned/.
+from .tasks/pending_skills/ into active .opencode/skills/.
 """
 
 import sys
 import os
 import json
-import shutil
 import subprocess
 
 MAX_SKILL_SIZE_BYTES = 15 * 1024  # 15 KB
-MAX_TOOL_DESC_CHARS = 500
 POLICY_FILE = ".opencode/policy.md"
 PENDING_DIR = ".tasks/pending_skills"
 SKILLS_DIR = ".opencode/skills"
 
+
 def log_err(msg):
     print(f"❌ [Skill Engine Error]: {msg}", file=sys.stderr)
 
+
 def log_ok(msg):
     print(f"✅ [Skill Engine]: {msg}")
+
 
 def check_file_limits(file_path):
     size = os.path.getsize(file_path)
@@ -29,6 +30,31 @@ def check_file_limits(file_path):
         log_err(f"File {file_path} exceeds size limit ({size} bytes > {MAX_SKILL_SIZE_BYTES} bytes).")
         return False
     return True
+
+
+def resolve_dest_path(target_skill):
+    """Return the absolute destination path for a skill directory name, or None if unsafe."""
+    if not target_skill or target_skill in (".", ".."):
+        log_err("Patch missing a valid 'target_skill' field.")
+        return None
+
+    # A skill name must be a single path component: no separators, no traversal,
+    # no leading dots, no absolute paths.
+    if os.sep in target_skill or "/" in target_skill or "\\" in target_skill:
+        log_err(f"Invalid 'target_skill' '{target_skill}': must be a plain directory name.")
+        return None
+    if target_skill.startswith(".") or os.path.isabs(target_skill):
+        log_err(f"Invalid 'target_skill' '{target_skill}': must be a plain directory name.")
+        return None
+
+    skills_root = os.path.abspath(SKILLS_DIR)
+    dest_dir = os.path.abspath(os.path.join(skills_root, target_skill))
+    if not dest_dir.startswith(skills_root + os.sep):
+        log_err(f"Invalid 'target_skill' '{target_skill}': escapes the skills directory.")
+        return None
+
+    return os.path.join(dest_dir, "SKILL.md")
+
 
 def verify_policy_integrity(patch_data):
     # Enforce immutable security rules
@@ -40,6 +66,7 @@ def verify_policy_integrity(patch_data):
             return False
     return True
 
+
 def run_eval_suite(patch_path):
     cmd = [sys.executable, ".opencode/evals/eval_skills.py", "--patch", patch_path]
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -48,6 +75,7 @@ def run_eval_suite(patch_path):
         return False
     log_ok("Eval suite passed.")
     return True
+
 
 def promote_patch(patch_filename):
     patch_path = os.path.join(PENDING_DIR, patch_filename)
@@ -78,12 +106,17 @@ def promote_patch(patch_filename):
         log_err("Patch missing 'target_skill' or 'content' fields.")
         sys.exit(1)
 
-    dest_path = os.path.join(SKILLS_DIR, target_skill)
+    dest_path = resolve_dest_path(target_skill)
+    if dest_path is None:
+        sys.exit(1)
+
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     with open(dest_path, "w", encoding="utf-8") as f:
         f.write(new_content)
 
     os.remove(patch_path)
     log_ok(f"Successfully promoted {patch_filename} to {dest_path}")
+
 
 def main():
     if len(sys.argv) < 2:
@@ -102,6 +135,7 @@ def main():
     else:
         log_err("Invalid arguments.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
