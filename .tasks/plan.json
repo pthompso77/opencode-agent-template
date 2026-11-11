@@ -1,0 +1,298 @@
+{
+  "version": "1.0",
+  "current_phase": "PENDING",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Scaffold congress_pipeline project layout and uv environment",
+      "status": "IN_PROGRESS",
+      "target_files": [
+        "congress_pipeline/pyproject.toml",
+        "congress_pipeline/uv.lock",
+        "congress_pipeline/src/congress_pipeline/__init__.py",
+        "congress_pipeline/dbt/dbt_project.yml",
+        "congress_pipeline/great_expectations/.gitkeep",
+        "congress_pipeline/contracts/.gitkeep",
+        "congress_pipeline/tests/__init__.py",
+        "congress_pipeline/Makefile",
+        "congress_pipeline/.env.example",
+        "congress_pipeline/.gitignore",
+        ".gitignore"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check .",
+      "acceptance_criteria": [
+        "Project lives in congress_pipeline/ subdirectory; structured to be extractable to its own repo later; not a git submodule (Req 9.1).",
+        "Importable package src/congress_pipeline/ exists with dbt/, great_expectations/, contracts/, tests/ directories (Req 9.1).",
+        "Dependencies tracked via uv with pyproject.toml + uv.lock committed and .venv ignored (Req 9.1, AC9).",
+        "Root .gitignore excludes the pipeline's .env, .venv, and build artifacts (Req 9.1).",
+        "pyproject.toml configures ruff and mypy against src (Req 10.1).",
+        "uv sync succeeds and the package imports cleanly."
+      ]
+    },
+    {
+      "id": "TASK-002",
+      "title": "Settings module via pydantic-settings and secret hygiene",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/settings.py",
+        "congress_pipeline/tests/unit/test_settings.py",
+        "congress_pipeline/.env.example",
+        "congress_pipeline/.gitignore"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_settings.py",
+      "acceptance_criteria": [
+        "API key supplied via .env read with pydantic-settings; .env.example committed and .env git-ignored (Req 8).",
+        "Postgres connection and Prefect API URL are environment-driven defaults for Compose (Req 8, Req 9.2).",
+        "Exposed API key in .mystuff/scratch.md is treated as compromised: rotation is documented and the new key never committed (Req 8, Req 12).",
+        "Unit test proves settings load from environment and that missing required secrets fail loudly."
+      ]
+    },
+    {
+      "id": "TASK-003",
+      "title": "Docker Compose topology: Postgres, Prefect server, Prefect worker",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/docker-compose.yml",
+        "congress_pipeline/.env.example",
+        "congress_pipeline/Makefile"
+      ],
+      "verification_cmd": "docker compose -f congress_pipeline/docker-compose.yml config",
+      "acceptance_criteria": [
+        "postgres service (warehouse), prefect-server service (API/UI), prefect-worker service (runs deployments) (Req 9.2, AC1).",
+        "Postgres default DB congress on port 5432; single-node local profile (Req 9.2).",
+        "prefect-server is its own Compose service; worker connects to it (Req 5.1, Q5/Q18).",
+        "Connection settings are environment-driven and match the settings module defaults (Req 8)."
+      ]
+    },
+    {
+      "id": "TASK-004",
+      "title": "bronze_members YAML data contract and coverage-checking loader",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/contracts/bronze_members.yaml",
+        "congress_pipeline/src/congress_pipeline/contracts.py",
+        "congress_pipeline/tests/unit/test_contract_loader.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_contract_loader.py",
+      "acceptance_criteria": [
+        "Checked-in vendor-neutral YAML contract is the single source of truth (Req 7, AC4).",
+        "Contract clauses: required fields present (bioguideId, name, partyName, state, updateDate, url); type checks; partyName in {Democratic, Republican, Independent}; bioguideId matches ^[A-Z]\\d{6}$; updateDate parses as ISO-8601; pagination/count consistency (Req 7).",
+        "Freshness is explicitly NOT a bronze contract clause (Req 5.3, Req 7).",
+        "Loader asserts the GE suite covers every clause in the contract (Req 7, AC4).",
+        "GE is the enforcement engine, the contract is the authority; loader is decoupled from GE internals (Req 7)."
+      ]
+    },
+    {
+      "id": "TASK-005",
+      "title": "Bronze schema: immutable raw payload ledger plus latest-state table",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/bronze.py",
+        "congress_pipeline/ddl/001_bronze.sql",
+        "congress_pipeline/tests/unit/test_bronze.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_bronze.py",
+      "acceptance_criteria": [
+        "bronze schema holds immutable raw JSONB payloads (list + detail) plus ingestion run metadata (Req 4, Req 6.1).",
+        "Raw Payload = one append-only row per fetch, keyed by run + bioguideId; full JSONB retained (Req 6.1, Req 5.2).",
+        "Latest-state convenience table stores current signature/updateDate per member (Req 5.2).",
+        "Append-only ledger is never updated in place; every fetched payload retained immutably and replayable (Req 11).",
+        "Layer boundaries enforced by schema isolation (bronze separate from silver/gold) (Req 11)."
+      ]
+    },
+    {
+      "id": "TASK-006",
+      "title": "Congress.gov API client: pagination, rate limits, backoff",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/api_client.py",
+        "congress_pipeline/tests/unit/test_pagination.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_pagination.py",
+      "acceptance_criteria": [
+        "List endpoint enumerated with limit=250 and offset pagination; detail endpoint fetched per bioguideId (Req 3, Req 5.2).",
+        "Pagination loop terminates on next cursor; never requests limit>250 (Req 3 fact: 251 clamped to 250).",
+        "Respects 20,000 req/hr with 429/5xx backoff; worst-case sweep ~1,100 requests stays far below the cap (Req 11, AC14).",
+        "No date-range incremental cursor is trusted (updateDate ignored per ADR-0002) (Req 3, Req 12).",
+        "Unit tests cover pagination assembly and backoff behavior with a mocked transport."
+      ]
+    },
+    {
+      "id": "TASK-007",
+      "title": "Payload-derived change detection with change signature",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/change_detection.py",
+        "congress_pipeline/tests/unit/test_change_detection.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_change_detection.py",
+      "acceptance_criteria": [
+        "Full sweep compares a per-member signature against latest bronze state and fetches detail only for new/changed members (Req 5.2, AC3, ADR-0002).",
+        "List updateDate is a cheap pre-filter; detail payload hash is authoritative (Req 12 Q13/Q14).",
+        "Unchanged members produce no duplicate rows (AC3, Req 11).",
+        "Signature is deterministic and stable across dict key ordering (Req 12 Q3).",
+        "Unit tests cover new, changed, and unchanged member scenarios."
+      ]
+    },
+    {
+      "id": "TASK-008",
+      "title": "Idempotent raw landing for bronze payloads",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/ingest.py",
+        "congress_pipeline/tests/unit/test_ingest_idempotency.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_ingest_idempotency.py",
+      "acceptance_criteria": [
+        "Idempotent upsert keyed on bioguideId (Req 5.2, Req 11).",
+        "Re-running a completed day's load leaves bronze row counts unchanged (AC13).",
+        "Raw landing writes append-only ledger plus latest-state convenience row (Req 5.2).",
+        "Unit test simulates a repeat run and asserts no duplicate bronze rows."
+      ]
+    },
+    {
+      "id": "TASK-009",
+      "title": "Prefect sweep flow: daily full sweep and parameterized backfill",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/flows.py",
+        "congress_pipeline/tests/unit/test_flows.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_flows.py",
+      "acceptance_criteria": [
+        "Flow tasks: enumerate members (paginated), fetch detail, land raw, run GE checkpoint, dbt run, dbt snapshot, gold checks, emit run summary (Req 5.1).",
+        "Daily deployment sweeps all current members (~539) landing raw payloads in bronze (AC2).",
+        "Backfill deployment is manual and parameterized to bootstrap activity from 2026-01-01 (Req 5.2, AC8).",
+        "Change detection gates detail fetches so unchanged members are not refetched (AC3).",
+        "Structured logs and a run summary artifact are emitted (Req 11)."
+      ]
+    },
+    {
+      "id": "TASK-010",
+      "title": "Great Expectations bronze checkpoint (fail-closed) and contract coverage",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/validation.py",
+        "congress_pipeline/great_expectations/great_expectations.yml",
+        "congress_pipeline/great_expectations/checkpoints/bronze_members.yml",
+        "congress_pipeline/tests/unit/test_ge_contract_coverage.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest tests/unit/test_ge_contract_coverage.py",
+      "acceptance_criteria": [
+        "GE validates bronze immediately after load against the checked-in contract (Req 5.3, AC4).",
+        "Bronze checkpoint is fail-closed: a contract breach halts the pipeline before silver/gold (Req 5.3, AC5).",
+        "A deliberately corrupted payload is rejected by the checkpoint and the run halts (AC5).",
+        "Loader proves GE suite covers every contract clause (Req 7, AC4).",
+        "Freshness is not enforced at bronze; it is a gold/monitoring SLA check (alert-only) (Req 5.3)."
+      ]
+    },
+    {
+      "id": "TASK-011",
+      "title": "dbt project and silver staging model (one current row per member)",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/dbt/dbt_project.yml",
+        "congress_pipeline/dbt/packages.yml",
+        "congress_pipeline/dbt/profiles.yml",
+        "congress_pipeline/dbt/models/silver/stg_members.sql",
+        "congress_pipeline/dbt/models/silver/schema.yml"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline dbt parse --project-dir dbt --profiles-dir dbt",
+      "acceptance_criteria": [
+        "dbt project targets the single Postgres warehouse; silver is a schema (Req 4).",
+        "stg_members is typed, renamed, deduplicated, one row per member current-state (Req 5.4, AC6).",
+        "dbt tests enforce silver invariants: uniqueness, not-null, accepted values (Req 5.4).",
+        "dbt_utils is declared in packages.yml for surrogate keys (Req 6.2).",
+        "dbt parse succeeds against profiles.yml."
+      ]
+    },
+    {
+      "id": "TASK-012",
+      "title": "Gold marts: member_terms and member_party_history at natural grain",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/dbt/models/gold/member_terms.sql",
+        "congress_pipeline/dbt/models/gold/member_party_history.sql",
+        "congress_pipeline/dbt/models/gold/schema.yml"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline dbt parse --project-dir dbt --profiles-dir dbt",
+      "acceptance_criteria": [
+        "member_terms is at term grain (bioguideId, congress, chamber, startYear) sourced from detail terms[] (Req 6.1, AC6).",
+        "member_party_history is at party-affiliation grain (bioguideId, partyAbbreviation, startYear) sourced from detail partyHistory[] (Req 6.1, AC6).",
+        "Array-valued history is modeled at natural grain, not SCD2-tracked (Req 6.2).",
+        "Gold tests enforce uniqueness, not-null, and relationships to dim_member (Req 5.4)."
+      ]
+    },
+    {
+      "id": "TASK-013",
+      "title": "SCD2 dim_member snapshot on scalar member attributes",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/dbt/snapshots/dim_member.sql",
+        "congress_pipeline/dbt/models/gold/dim_member.sql",
+        "congress_pipeline/dbt/models/gold/schema.yml"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline dbt parse --project-dir dbt --profiles-dir dbt",
+      "acceptance_criteria": [
+        "Full SCD2 on scalar attributes: name fields, state, district, current party, currentMember flag, birth year, honorific (Req 6.2, AC6).",
+        "Change trigger is a dbt_utils.generate_surrogate_key hash over the tracked scalar set; on change close current version and open new (Req 6.2, AC7).",
+        "A simulated attribute change produces exactly one new SCD2 version with correct valid-from/valid-to (AC7).",
+        "Terms/partyHistory arrays are not SCD2-tracked (Req 6.2).",
+        "Tracked-attribute set is provisional and documented as refinable (Req 6.2)."
+      ]
+    },
+    {
+      "id": "TASK-014",
+      "title": "Prefect work pool, deployments, and collection integrations",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/src/congress_pipeline/deployments.py",
+        "congress_pipeline/prefect.yaml",
+        "congress_pipeline/src/congress_pipeline/summary.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src --exclude dbt",
+      "acceptance_criteria": [
+        "Work pool + deployment model (not ephemeral, not bare flow.serve()) (Req 5.1).",
+        "Daily deployment has a daily cron schedule; Backfill deployment is manual and parameterized (Req 5.1, AC2, AC8).",
+        "prefect-dbt and prefect-great-expectations used where the needed feature is implemented; subprocess/Python fallback otherwise (Req 5.1 Q19).",
+        "Run summary artifact emitted per run (Req 5.1, Req 11).",
+        "Deployments register against the Compose-hosted Prefect server (Req 5.1, Req 9.2)."
+      ]
+    },
+    {
+      "id": "TASK-015",
+      "title": "Testcontainers integration test: load to GE to dbt build",
+      "status": "PENDING",
+      "target_files": [
+        "congress_pipeline/tests/integration/conftest.py",
+        "congress_pipeline/tests/integration/test_pipeline_end_to_end.py"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline pytest tests/integration",
+      "acceptance_criteria": [
+        "Postgres provisioned via Testcontainers (ephemeral, no port conflicts); CI does not use Compose (Req 9.2, Req 10).",
+        "Integration test runs a real load to GE checkpoint to dbt build against a throwaway DB (Req 10).",
+        "Idempotency asserted: a second run leaves row counts unchanged (AC13).",
+        "Bronze fail-closed behavior verified against a corrupted payload (AC5).",
+        "A simulated attribute change yields exactly one new SCD2 version (AC7)."
+      ]
+    },
+    {
+      "id": "TASK-016",
+      "title": "GitHub Actions CI, Makefile targets, and README",
+      "status": "PENDING",
+      "target_files": [
+        ".github/workflows/ci.yml",
+        "congress_pipeline/Makefile",
+        "congress_pipeline/README.md"
+      ],
+      "verification_cmd": "uv run --directory congress_pipeline ruff check . && uv run --directory congress_pipeline mypy src && uv run --directory congress_pipeline pytest && uv run --directory congress_pipeline dbt parse --project-dir dbt --profiles-dir dbt",
+      "acceptance_criteria": [
+        "CI runs lint, typecheck, unit tests, integration tests, and dbt parse on push/PR (Req 10, AC11).",
+        "Makefile exposes up, down, bootstrap, daily, dbt-build, ge-check, test, lint (Req 10, AC1).",
+        "make up brings up Postgres + Prefect server + worker via Docker Compose (AC1).",
+        "README documents architecture (medallion diagram), the data contract, and run instructions (Req 13, AC12).",
+        "Full verification command chain passes locally (Req 10.1)."
+      ]
+    }
+  ]
+}

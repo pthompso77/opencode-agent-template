@@ -1,0 +1,19 @@
+# The congress_pipeline project is a self-contained uv workspace.
+# Keep its environment, secrets, and build artifacts out of version control.
+congress_pipeline/.env
+congress_pipeline/.venv/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# dbt artifacts
+congress_pipeline/dbt/target/
+congress_pipeline/dbt/dbt_packages/
+congress_pipeline/dbt/logs/
+
+# Great Expectations artifacts
+congress_pipeline/great_expectations/uncommitted/
