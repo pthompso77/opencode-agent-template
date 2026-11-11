@@ -1,1 +1,1 @@
-policy.md
+../policy.md

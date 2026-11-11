@@ -14,6 +14,7 @@ This template implements a strict, human-in-the-loop, multi-persona agent framew
 * **Discovery First (`/grill`)**: Frontier-based requirements discovery before architectural planning.
 * **State Machine Driven (`.tasks/plan.json`)**: Deterministic task management enforced via strict JSON Schema.
 * **Bounded Self-Correction**: Strict 2-attempt limit on local bug fixes before mandatory human escalation.
+* **Independent Review (`/pr-code-review`)**: Evidence-based PR review that writes a severity-classified artifact to `.tasks/reviews/` and halts — never merges, approves, or edits the branch.
 * **Tool-Assisted Navigation (`/navigate`)**: AST and static-analysis symbol mapping out-of-context to keep prompt windows clean.
 * **Hermes-Inspired Self-Improvement Loop**: Safe procedural skill mutation via staged patch proposals (`.tasks/pending_skills/`), protected policy layers, and local evaluation test harnesses.
 * **Workspace Snapshots**: Automatic git stashes/checkpoints before task execution for instant rollback on verification failures.
@@ -27,17 +28,25 @@ This template implements a strict, human-in-the-loop, multi-persona agent framew
 ├── README.md                      # Template documentation & usage guide
 ├── policy.md                      # Global immutable security & execution rules
 ├── scripts/
-│   ├── tasks-cli                  # Python CLI for safe atomic updates to .tasks/plan.json
-│   └── opencode-skill-engine      # Validation & promotion engine for Hermes-Inspired skill patches
+│   ├── tasks-cli.py               # Python CLI for safe atomic updates to .tasks/plan.json
+│   └── opencode-skill-engine.py   # Validation & promotion engine for Hermes-Inspired skill patches
 ├── .opencode/
 │   ├── policy.md                  # Symlink/copy of root policy for OpenCode environment
 │   ├── skills/                    # Specialized persona prompt definitions
-│   │   ├── grill.md               # Interrogator & Requirements Specialist (/grill)
-│   │   ├── plan.md                # Architect & Task Planner (/plan)
-│   │   ├── navigate.md            # Code Graph Navigator (/navigate)
-│   │   ├── implement.md           # Software Engineer & Implementer (/implement)
-│   │   ├── troubleshoot.md        # Diagnostic Specialist (/troubleshoot)
-│   │   └── audit-skill.md         # Skill Auditor & Policy Evaluator (/audit-skill)
+│   │   ├── audit/                 # Skill Auditor & Policy Evaluator (/audit)
+│   │   │   └── SKILL.md
+│   │   ├── grill/                 # Interrogator & Requirements Specialist (/grill)
+│   │   │   └── SKILL.md
+│   │   ├── implement/             # Software Engineer & Implementer (/implement)
+│   │   │   └── SKILL.md
+│   │   ├── navigate/              # Code Graph Navigator (/navigate)
+│   │   │   └── SKILL.md
+│   │   ├── plan/                  # Architect & Task Planner (/plan)
+│   │   │   └── SKILL.md
+│   │   ├── pr-code-review/        # Independent Code Reviewer (/pr-code-review)
+│   │   │   └── SKILL.md
+│   │   └── troubleshoot/          # Diagnostic Specialist (/troubleshoot)
+│   │       └── SKILL.md
 │   └── evals/                     # Deterministic test harness for auditing skill mutations
 │       └── eval_skills.py         # Test runner for proposed skill patches
 └── .tasks/
@@ -45,6 +54,7 @@ This template implements a strict, human-in-the-loop, multi-persona agent framew
     ├── requirements.md            # Generated output from /grill (git-ignored or committed per project)
     ├── plan.json                  # Active project task board and phase state
     ├── incident.json              # Error logs, attempt counts, and diagnostic diffs
+    ├── reviews/                   # Review artifacts (pr-<n>-<shortsha>.md), one per reviewed revision
     └── pending_skills/            # Staging directory for proposed skill updates (PROPOSED -> ACTIVE)
 ```
 
@@ -56,21 +66,22 @@ This template implements a strict, human-in-the-loop, multi-persona agent framew
 * **`policy.md`**: Defines non-negotiable operational guidelines (prohibited shell commands, file-read token budgets, skill mutation restrictions). Read-only to agents; cannot be modified or overridden by LLM output or user prompts.
 
 ### 2. Persona Skills (`.opencode/skills/`)
-Each skill is encapsulated in a Markdown file with YAML frontmatter specifying its triggering criteria and execution protocol:
+Each skill is encapsulated in a directory with a `SKILL.md` file containing YAML frontmatter specifying its triggering criteria and execution protocol:
 
 | Skill | Persona / Command | Description & Role |
 | :--- | :--- | :--- |
-| **`grill.md`** | Interrogator (`/grill`) | Conducts multi-round frontier discovery interviews to stress-test ideas and write `.tasks/requirements.md`. |
-| **`plan.md`** | Architect (`/plan`) | Converts formal requirements into small, sequential PR-sized tasks in `.tasks/plan.json`. |
-| **`navigate.md`** | Navigator (`/navigate`) | Resolves symbols, imports, and cross-file callers via AST CLI tools (`ast-grep`, `ctags`, `grep`) without loading full source files into context. |
-| **`implement.md`** | Engineer (`/implement`) | Takes an `IN_PROGRESS` task, creates a git workspace snapshot, writes code/tests, runs local validation, drafts PR, and proposes learned patches. |
-| **`troubleshoot.md`** | Specialist (`/troubleshoot`) | Analyzes `.tasks/incident.json` failures, formulates targeted fixes, enforces 2-attempt limits, and triggers snapshot rollbacks if unresolvable. |
-| **`audit-skill.md`** | Auditor (`/audit-skill`) | Evaluates candidate skill patches in `.tasks/pending_skills/` against policy rules and execution evals before promoting to live skills. |
+| **`grill/SKILL.md`** | Interrogator (`/grill`) | Conducts multi-round frontier discovery interviews to stress-test ideas and write `.tasks/requirements.md`. |
+| **`plan/SKILL.md`** | Architect (`/plan`) | Converts formal requirements into small, sequential PR-sized tasks in `.tasks/plan.json`. |
+| **`navigate/SKILL.md`** | Navigator (`/navigate`) | Resolves symbols, imports, and cross-file callers via AST CLI tools (`ast-grep`, `ctags`, `grep`) without loading full source files into context. |
+| **`implement/SKILL.md`** | Engineer (`/implement`) | Takes an `IN_PROGRESS` task, creates a git workspace snapshot, writes code/tests, runs local validation, drafts PR, and proposes learned patches. |
+| **`pr-code-review/SKILL.md`** | Reviewer (`/pr-code-review`) | Independently reviews a `PR_READY` branch against its target and the task's acceptance criteria, verifies the implementer's claims, and writes one severity-classified artifact to `.tasks/reviews/`. Read-only; never merges, approves, or edits code. |
+| **`troubleshoot/SKILL.md`** | Specialist (`/troubleshoot`) | Analyzes `.tasks/incident.json` failures, formulates targeted fixes, enforces 2-attempt limits, and triggers snapshot rollbacks if unresolvable. |
+| **`audit/SKILL.md`** | Auditor (`/audit`) | Evaluates candidate skill patches in `.tasks/pending_skills/` against policy rules and execution evals before promoting to live skills. |
 
 ### 3. Task State Machine & CLI Tools (`.tasks/` & `scripts/`)
 * **`plan.schema.json`**: Enforces strict typing and status enums (`PENDING`, `IN_PROGRESS`, `NEEDS_TROUBLESHOOTING`, `PR_READY`, `COMPLETED`, `ESCALATED`).
-* **`scripts/tasks-cli`**: Atomic Python utility ensuring LLMs do not output malformed JSON when updating task status.
-* **`scripts/opencode-skill-engine`**: Local host runner executing out-of-context static and policy checks on proposed skill patches.
+* **`scripts/tasks-cli.py`**: Atomic Python utility ensuring LLMs do not output malformed JSON when updating task status.
+* **`scripts/opencode-skill-engine.py`**: Local host runner executing out-of-context static and policy checks on proposed skill patches.
 
 ---
 
@@ -98,10 +109,20 @@ Each skill is encapsulated in a Markdown file with YAML frontmatter specifying i
 │    /implement  ───►  Workspace Snapshot ───► Code & Test ───► Verification          │
 │          │                                                        │                 │
 │          ├──► Verification Passed ───► PR Draft ───► PR_READY    │                  │
-│          │                                   (Awaits Review)      │                 │
+│          │                                   (Awaits /pr-code-review)                │
 │          └─► Failure (Attempt < 2) ───► /troubleshoot ───────────┘                  │
 │                     │                                                               │
 │                     └─► Failure (Attempt >= 2) ───► Rollback Snapshot ───► ESCALATED│
+└────────────────────────────────────────┬────────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ 3b. INDEPENDENT REVIEW PHASE                                                        │
+│    PR_READY  ───►  /pr-code-review  ───►  Findings + Verdict                        │
+│                          │                                                          │
+│                          ├──► Blockers found ───► (human) NEEDS_TROUBLESHOOTING     │
+│                          └──► Clean ────────────► (human) COMPLETED                 │
+│    Artifact: .tasks/reviews/pr-<n>-<shortsha>.md — read-only; never merges.          │
 └────────────────────────────────────────┬────────────────────────────────────────────┘
                                          │
                                          ▼
@@ -109,7 +130,7 @@ Each skill is encapsulated in a Markdown file with YAML frontmatter specifying i
 │ 4. HERMES-STYLE SELF-IMPROVEMENT LOOP                                           │
 │    New Edge Case Discovered ───► Propose Patch ───► .tasks/pending_skills/      │
 │                                                           │                     │
-│    opencode-skill-engine ◄─── /audit-skill ──────────────┘                      │
+│    opencode-skill-engine ◄─── /audit ─────────────────────┘                     │
 │          │                                                                      │
 │          └──► Policy & Eval Pass ───► Promote to Active Skill                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -129,12 +150,12 @@ To introduce this agent prompting framework into a new or existing repository:
 
 2. **Ensure CLI helpers are executable**:
    ```bash
-   chmod +x scripts/tasks-cli scripts/opencode-skill-engine
+   chmod +x scripts/tasks-cli.py scripts/opencode-skill-engine.py
    ```
 
 3. **Verify directory existence**:
    ```bash
-   mkdir -p .tasks/pending_skills .opencode/evals
+   mkdir -p .tasks/pending_skills .tasks/reviews .opencode/evals
    ```
 
 ### B. Execution Walkthrough
@@ -164,7 +185,7 @@ To introduce this agent prompting framework into a new or existing repository:
 4. **Audit and Promote Learned Skills**:
    When an execution generates a patch in `.tasks/pending_skills/`:
    ```text
-   /audit-skill
+   /audit
    ```
    The engine validates security boundaries and unit evals before merging the optimization into live skills.
 
@@ -173,7 +194,7 @@ To introduce this agent prompting framework into a new or existing repository:
 ## 🔒 Safety & Governance Principles
 
 1. **Policy Supremacy**: `policy.md` takes precedence over all persona prompts and LLM-generated text.
-2. **Deterministic CLI Control**: State mutations MUST go through `scripts/tasks-cli` to guarantee schema validity.
+2. **Deterministic CLI Control**: State mutations MUST go through `scripts/tasks-cli.py` to guarantee schema validity.
 3. **Immutable Core Prompts**: Agents cannot modify their own core system prompts directly; mutations must pass through the `propose_skill_patch` queue and local eval pipeline.
 4. **No Destructive Shell Commands**: `rm -rf`, `git reset --hard` (outside system-controlled snapshot reverts), and force pushes are blocked.
 
